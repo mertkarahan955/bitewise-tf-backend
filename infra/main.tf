@@ -64,8 +64,12 @@ resource "google_cloud_run_v2_service" "svc" {
     containers {
       image = local.image_ref
       ports { container_port = 8080 }
-      env { name = "STAGE" value = var.env }
+      env {
+        name = "STAGE"
+        value = var.env
+      }
     }
+
   }
 
   depends_on = [google_artifact_registry_repository.repo]
