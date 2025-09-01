@@ -80,6 +80,13 @@ jobs:
         with:
           terraform_version: 1.6.6
 
+      - name: Pre-enable base APIs
+        run: |
+          gcloud services enable \
+            cloudresourcemanager.googleapis.com \
+            serviceusage.googleapis.com \
+            --project "${{ env.PROJECT_ID }}"
+
       - name: Terraform Apply (prod)
         working-directory: infra
         env:
