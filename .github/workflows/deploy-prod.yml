@@ -13,7 +13,8 @@ env:
   REGION: ${{ vars.GCP_REGION }}
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   AR_REPO: ${{ vars.AR_REPO }}
-  IMAGE_NAME: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPO }}/${{ env.SERVICE_NAME }}
+  # DÜZELTME: env.SERVICE_NAME kullanma; literal yaz.
+  IMAGE_NAME: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPO }}/bitewise-api
 
 concurrency:
   group: prod-cicd
@@ -30,7 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # OIDC ile GCP'ye giriş
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDP }}
@@ -42,7 +42,6 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # Mimaride sürpriz yaşamamak için linux/amd64 build & push
       - name: Build & Push (linux/amd64)
         run: |
           TAG=${{ github.sha }}
@@ -51,7 +50,6 @@ jobs:
             -t "$IMAGE" -f backend/Dockerfile backend --push
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-      # Push edilen imajın DIGEST'ini al ve immutable referans üret
       - name: Resolve image digest
         id: out
         run: |
