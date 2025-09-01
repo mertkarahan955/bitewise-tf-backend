@@ -1,0 +1,29 @@
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+env/
+venv/
+.env
+.env.*
+
+# Docker
+*.pid
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Lock dosyasını commitle
+!.terraform.lock.hcl

@@ -1,0 +1,103 @@
+name: Prod CI/CD (TF deploy)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - backend/**
+      - infra/**
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: bitewise-api
+  REGION: ${{ vars.GCP_REGION }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  AR_REPO: ${{ vars.AR_REPO }}
+  IMAGE_NAME: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPO }}/${{ env.SERVICE_NAME }}
+
+concurrency:
+  group: prod-cicd
+  cancel-in-progress: true
+
+jobs:
+  build_push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_with_digest: ${{ steps.out.outputs.image_with_digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # OIDC ile GCP'ye giriş
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDP }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # Mimaride sürpriz yaşamamak için linux/amd64 build & push
+      - name: Build & Push (linux/amd64)
+        run: |
+          TAG=${{ github.sha }}
+          IMAGE="${IMAGE_NAME}:${TAG}"
+          docker buildx build --platform linux/amd64 \
+            -t "$IMAGE" -f backend/Dockerfile backend --push
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # Push edilen imajın DIGEST'ini al ve immutable referans üret
+      - name: Resolve image digest
+        id: out
+        run: |
+          DIGEST=$(gcloud artifacts docker images describe "${IMAGE}" --format='value(image_summary.digest)')
+          echo "image_with_digest=${IMAGE_NAME}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          echo "Pushed image: **${IMAGE}**" >> $GITHUB_STEP_SUMMARY
+          echo "Immutable: **${{ steps.out.outputs.image_with_digest }}**" >> $GITHUB_STEP_SUMMARY
+
+  tf_apply_prod:
+    runs-on: ubuntu-latest
+    needs: build_push
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDP }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform Apply (prod)
+        working-directory: infra
+        env:
+          TF_IN_AUTOMATION: "true"
+        run: |
+          terraform init -input=false -reconfigure
+          terraform workspace select prod || terraform workspace new prod
+          terraform apply -auto-approve \
+            -var="project_id=${{ env.PROJECT_ID }}" \
+            -var="region=${{ env.REGION }}" \
+            -var="env=prod" \
+            -var="image=${{ needs.build_push.outputs.image_with_digest }}"
+
+      - name: Print service URL
+        working-directory: infra
+        run: |
+          URL=$(terraform output -raw service_url)
+          echo "Service URL: **$URL**" >> $GITHUB_STEP_SUMMARY
+          echo "$URL"
