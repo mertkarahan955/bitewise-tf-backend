@@ -9,3 +9,22 @@ variable "image" {
   type        = string
   default     = null
 }
+
+variable "manage_repo" {
+  description = "Artifact Registry reposunu Terraform oluştursun mu?"
+  type        = bool
+  default     = false   # dev'de false, prod'da true
+}
+
+variable "create_runtime_sa" {
+  description = "Cloud Run runtime SA'yı Terraform oluştursun mu?"
+  type        = bool
+  default     = false   # dev'de false, prod'da true (veya bootstrap koşusunda)
+}
+
+variable "runtime_sa_email" {
+  description = "Oluşturulmayacaksa kullanılacak mevcut SA e-mail"
+  type        = string
+  default     = null
+}
+
